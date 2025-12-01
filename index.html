@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Photo to Telegram</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            text-align: center;
+            font-size: 28px;
+        }
+
+        .info {
+            background: #e6fffa;
+            border-left: 4px solid #38b2ac;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #234e52;
+        }
+
+        .camera-section {
+            margin: 30px 0;
+            text-align: center;
+        }
+
+        video {
+            width: 100%;
+            max-width: 400px;
+            border-radius: 12px;
+            background: #000;
+            display: none;
+        }
+
+        video.active {
+            display: block;
+        }
+
+        canvas {
+            display: none;
+        }
+
+        .preview {
+            width: 100%;
+            max-width: 400px;
+            border-radius: 12px;
+            margin: 20px auto;
+            display: none;
+        }
+
+        .preview.active {
+            display: block;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 20px;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: #48bb78;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #38a169;
+        }
+
+        .btn-danger {
+            background: #f56565;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #e53e3e;
+        }
+
+        .btn-upload {
+            background: #ed8936;
+            color: white;
+        }
+
+        .btn-upload:hover {
+            background: #dd6b20;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .status {
+            margin-top: 20px;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: 500;
+            display: none;
+        }
+
+        .status.active {
+            display: block;
+        }
+
+        .status.success {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .status.error {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .endpoint-info {
+            background: #fef5e7;
+            border: 1px solid #f39c12;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 8px;
+            font-size: 12px;
+        }
+
+        .endpoint-info code {
+            background: #fff;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+            color: #e74c3c;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📸 Photo to Telegram</h1>
+        
+        <div class="info">
+            <strong>Manual Mode:</strong> Capture or upload a photo and send it to Telegram manually.
+        </div>
+
+        <div class="camera-section">
+            <video id="video" autoplay playsinline></video>
+            <canvas id="canvas"></canvas>
+            <img id="preview" class="preview" alt="Preview">
+        </div>
+
+        <div class="button-group">
+            <button id="startCamera" class="btn-primary">📷 Start Camera</button>
+            <button id="capturePhoto" class="btn-secondary" style="display:none;">✓ Capture</button>
+            <button id="uploadBtn" class="btn-upload">📁 Upload Photo</button>
+            <button id="retake" class="btn-danger" style="display:none;">✕ Retake</button>
+            <button id="sendBtn" class="btn-primary" style="display:none;">✈️ Send to Telegram</button>
+        </div>
+
+        <input type="file" id="fileInput" accept="image/*">
+        <div id="status" class="status"></div>
+
+        <div class="endpoint-info">
+            <strong>🤖 For Cron-job.org:</strong><br>
+            Use this URL: <code id="cronUrl">https://your-app.vercel.app/api/send-image</code><br>
+            <small>Replace with your actual Vercel URL after deployment</small>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const preview = document.getElementById('preview');
+        const startCameraBtn = document.getElementById('startCamera');
+        const captureBtn = document.getElementById('capturePhoto');
+        const retakeBtn = document.getElementById('retake');
+        const sendBtn = document.getElementById('sendBtn');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const fileInput = document.getElementById('fileInput');
+        const statusDiv = document.getElementById('status');
+        const cronUrl = document.getElementById('cronUrl');
+
+        let photoBlob = null;
+        let stream = null;
+
+        // Update cron URL with current domain
+        cronUrl.textContent = `${window.location.origin}/api/send-image`;
+
+        startCameraBtn.addEventListener('click', async () => {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: 'user' } 
+                });
+                video.srcObject = stream;
+                video.classList.add('active');
+                startCameraBtn.style.display = 'none';
+                captureBtn.style.display = 'inline-block';
+                uploadBtn.style.display = 'none';
+            } catch (err) {
+                showStatus('Camera access denied', 'error');
+            }
+        });
+
+        captureBtn.addEventListener('click', () => {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            
+            canvas.toBlob((blob) => {
+                photoBlob = blob;
+                preview.src = URL.createObjectURL(blob);
+                preview.classList.add('active');
+                stopCamera();
+                captureBtn.style.display = 'none';
+                retakeBtn.style.display = 'inline-block';
+                sendBtn.style.display = 'inline-block';
+            }, 'image/jpeg');
+        });
+
+        uploadBtn.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file && file.type.startsWith('image/')) {
+                photoBlob = file;
+                preview.src = URL.createObjectURL(file);
+                preview.classList.add('active');
+                startCameraBtn.style.display = 'none';
+                uploadBtn.style.display = 'none';
+                retakeBtn.style.display = 'inline-block';
+                sendBtn.style.display = 'inline-block';
+            }
+        });
+
+        retakeBtn.addEventListener('click', () => {
+            photoBlob = null;
+            preview.classList.remove('active');
+            preview.src = '';
+            retakeBtn.style.display = 'none';
+            sendBtn.style.display = 'none';
+            startCameraBtn.style.display = 'inline-block';
+            uploadBtn.style.display = 'inline-block';
+            statusDiv.classList.remove('active');
+        });
+
+        sendBtn.addEventListener('click', async () => {
+            if (!photoBlob) {
+                showStatus('Please capture or upload a photo', 'error');
+                return;
+            }
+
+            sendBtn.disabled = true;
+            sendBtn.textContent = 'Sending...';
+
+            try {
+                const formData = new FormData();
+                formData.append('photo', photoBlob, 'photo.jpg');
+
+                const response = await fetch('/api/send-image', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showStatus('Photo sent successfully! ✓', 'success');
+                    photoBlob = null;
+                    preview.classList.remove('active');
+                    retakeBtn.style.display = 'none';
+                    sendBtn.style.display = 'none';
+                    startCameraBtn.style.display = 'inline-block';
+                    uploadBtn.style.display = 'inline-block';
+                } else {
+                    showStatus(`Error: ${data.error}`, 'error');
+                }
+            } catch (err) {
+                showStatus('Failed to send photo', 'error');
+            } finally {
+                sendBtn.disabled = false;
+                sendBtn.innerHTML = '✈️ Send to Telegram';
+            }
+        });
+
+        function stopCamera() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                video.classList.remove('active');
+                stream = null;
+            }
+        }
+
+        function showStatus(message, type) {
+            statusDiv.textContent = message;
+            statusDiv.className = `status active ${type}`;
+        }
+    </script>
+</body>
+</html>
